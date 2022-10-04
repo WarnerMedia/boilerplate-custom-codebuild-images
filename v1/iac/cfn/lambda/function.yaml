@@ -1,0 +1,315 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Create a Lambda function."
+Parameters:
+  # General Configuration
+  InfrastructureName:
+    Type: "String"
+    Description: "A name used to differentiate this infrastructure from other existing infrastructure."
+    Default: "main"
+  AppBaseFolder:
+    Type: "String"
+    Description: "The base repository folder for the application."
+  # Lambda Function Configuration
+  FunctionRuntimeVersion:
+    Type: "String"
+    Description: "The Node.js version that should be used for this function."
+    Default: "nodejs14.x"
+  FunctionTimeout:
+    Type: "Number"
+    Description: "How long before the Lambda should time out (in seconds)?"
+    Default: 30
+  FunctionName:
+    Type: "String"
+    Description: "The name we are giving this function."
+    Default: "codepipeline-github-release"
+  FunctionHandler:
+    Type: "String"
+    Description: "The handler for the function."
+    Default: "src/app.handler"
+  FunctionVersion:
+    Type: "String"
+    Description: "This version number that we want to give the current Lambda code."
+  FunctionCommit:
+    Type: "String"
+    Description: "This is the Git commit hash."
+  FunctionS3Bucket:
+    Type: "String"
+    Description: "Set an alternate S3 bucket to get the Lambda ZIP file from."
+  FunctionS3Key:
+    Type: "String"
+    Description: "Set an alternate S3 key for the Lambda ZIP file.  If this is set, then the Function Version is ignored."
+  # Tag Configuration
+  TagEnvironment:
+    Type: "String"
+    Description: "Which environment are we deploying to?"
+Conditions:
+  AppBaseFolder: !Not [ !Equals [ !Ref AppBaseFolder, "" ] ]
+Resources:
+  LambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Effect: "Allow"
+          Principal:
+            Service:
+            - "lambda.amazonaws.com"
+          Action:
+          - "sts:AssumeRole"
+      Policies:
+      - PolicyName: !Ref FunctionName
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Resource: "arn:aws:logs:*:*:*"
+            Effect: "Allow"
+            Action:
+            - "logs:CreateLogGroup"
+            - "logs:CreateLogStream"
+            - "logs:PutLogEvents"
+          - Resource: "*"
+            Effect: "Allow"
+            Action:
+            - "kms:Decrypt"
+          - Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:account/main/github*"
+            Effect: "Allow"
+            Action:
+            - "secretsmanager:GetSecretValue"
+          - Resource: "*"
+            Effect: "Allow"
+            Action:
+            - "codepipeline:PutJobSuccessResult"
+            - "codepipeline:PutJobFailureResult"
+      Tags:
+      - Key: "Name"
+        Value: !Ref "AWS::StackName"
+      - Key: "application"
+        Value: !Ref "AWS::StackName"
+      - Key: "contact-email"
+        Value: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/contact-email}}"
+      - Key: "customer"
+        Value: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/customer}}"
+      - Key: "environment"
+        Value: !Ref TagEnvironment
+      - Key: "team"
+        Value: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/team}}"
+  LambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Handler: !Sub 
+      - "${Folder}${FunctionHandler}"
+      - Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
+      FunctionName: !Sub "${FunctionName}-${TagEnvironment}"
+      Description: !Sub "version-${FunctionVersion} (git-${FunctionCommit})"
+      Role: !GetAtt LambdaRole.Arn
+      Runtime: !Ref FunctionRuntimeVersion
+      Timeout: !Ref FunctionTimeout
+      Code:
+        S3Bucket: !Ref FunctionS3Bucket
+        S3Key: !Ref FunctionS3Key
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref TagEnvironment
+          REGION: !Ref "AWS::Region"
+          SECRET_TOKEN_ARN: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:account/main/github"
+      Tags:
+      - Key: "Name"
+        Value: !Ref "AWS::StackName"
+      - Key: "application"
+        Value: !Ref "AWS::StackName"
+      - Key: "contact-email"
+        Value: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/contact-email}}"
+      - Key: "customer"
+        Value: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/customer}}"
+      - Key: "environment"
+        Value: !Ref TagEnvironment
+      - Key: "team"
+        Value: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/team}}"
+  EventLambdaFunctionPermission:
+    Type: "AWS::Lambda::Permission"
+    DependsOn: LambdaFunction
+    Properties:
+      Action: "lambda:InvokeFunction"
+      FunctionName: !GetAtt LambdaFunction.Arn
+      Principal: "events.amazonaws.com"
+      SourceArn: !Sub "arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/codepipeline*"
+  # SSM Parameters
+  ParamLambdaRoleName:
+    Type: "AWS::SSM::Parameter"
+    Properties:
+      DataType: "text"
+      Description: "The Lambda role name."
+      Name: !Sub "/lambda/${InfrastructureName}/role/${FunctionName}-${TagEnvironment}/name"
+      Tier: "Standard"
+      Type: "String"
+      Value: !Ref LambdaRole
+      Tags:
+        Name: !Ref "AWS::StackName"
+        application: !Ref "AWS::StackName"
+        customer: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/customer}}"
+        contact-email: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/contact-email}}"
+        environment: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/environment}}"
+        team: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/team}}"
+  ParamLambdaRoleId:
+    Type: "AWS::SSM::Parameter"
+    Properties:
+      DataType: "text"
+      Description: "The Lambda role ID."
+      Name: !Sub "/lambda/${InfrastructureName}/role/${FunctionName}-${TagEnvironment}/id"
+      Tier: "Standard"
+      Type: "String"
+      Value: !GetAtt LambdaRole.RoleId
+      Tags:
+        Name: !Ref "AWS::StackName"
+        application: !Ref "AWS::StackName"
+        customer: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/customer}}"
+        contact-email: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/contact-email}}"
+        environment: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/environment}}"
+        team: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/team}}"
+  ParamLambdaRoleArn:
+    Type: "AWS::SSM::Parameter"
+    Properties:
+      DataType: "text"
+      Description: "The Lambda role ARN."
+      Name: !Sub "/lambda/${InfrastructureName}/role/${FunctionName}-${TagEnvironment}/arn"
+      Tier: "Standard"
+      Type: "String"
+      Value: !GetAtt LambdaRole.Arn
+      Tags:
+        Name: !Ref "AWS::StackName"
+        application: !Ref "AWS::StackName"
+        customer: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/customer}}"
+        contact-email: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/contact-email}}"
+        environment: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/environment}}"
+        team: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/team}}"
+  ParamLambdaFunctionName:
+    Type: "AWS::SSM::Parameter"
+    Properties:
+      DataType: "text"
+      Description: "The Lambda function name."
+      Name: !Sub "/lambda/${InfrastructureName}/function/${FunctionName}-${TagEnvironment}/name"
+      Tier: "Standard"
+      Type: "String"
+      Value: !Ref LambdaFunction
+      Tags:
+        Name: !Ref "AWS::StackName"
+        application: !Ref "AWS::StackName"
+        customer: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/customer}}"
+        contact-email: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/contact-email}}"
+        environment: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/environment}}"
+        team: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/team}}"
+  ParamLambdaFunctionArn:
+    Type: "AWS::SSM::Parameter"
+    Properties:
+      DataType: "text"
+      Description: "The Lambda function ARN."
+      Name: !Sub "/lambda/${InfrastructureName}/function/${FunctionName}-${TagEnvironment}/arn"
+      Tier: "Standard"
+      Type: "String"
+      Value: !GetAtt LambdaFunction.Arn
+      Tags:
+        Name: !Ref "AWS::StackName"
+        application: !Ref "AWS::StackName"
+        customer: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/customer}}"
+        contact-email: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/contact-email}}"
+        environment: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/environment}}"
+        team: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/team}}"
+Outputs:
+  LambdaRoleName:
+    Description: "The Lambda role name."
+    Value: !Ref LambdaRole
+    Export:
+      Name: !Sub "${AWS::StackName}-LambdaRoleName"
+  LambdaRoleArn:
+    Description: "The Lambda role ARN."
+    Value: !GetAtt LambdaRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-LambdaRoleArn"
+  LambdaRoleId:
+    Description: "The Lambda role ID."
+    Value: !GetAtt LambdaRole.RoleId
+    Export:
+      Name: !Sub "${AWS::StackName}-LambdaRoleId"
+  LambdaFunctionName:
+    Description: "The Lambda function name."
+    Value: !Ref LambdaFunction
+    Export:
+      Name: !Sub "${AWS::StackName}-LambdaFunctionName"
+  LambdaFunctionArn:
+    Description: "The Lambda function ARN."
+    Value: !GetAtt LambdaFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-LambdaFunctionArn"
+  ParamLambdaRoleName:
+    Description: "The Lambda role name SSM parameter."
+    Value: !Ref ParamLambdaRoleName
+    Export:
+      Name: !Sub "${AWS::StackName}-ParamLambdaRoleName"
+  ParamLambdaRoleId:
+    Description: "The Lambda role ID SSM parameter."
+    Value: !Ref ParamLambdaRoleId
+    Export:
+      Name: !Sub "${AWS::StackName}-ParamLambdaRoleId"
+  ParamLambdaRoleArn:
+    Description: "The Lambda role ARN SSM parameter."
+    Value: !Ref ParamLambdaRoleArn
+    Export:
+      Name: !Sub "${AWS::StackName}-ParamLambdaRoleArn"
+  ParamLambdaFunctionName:
+    Description: "The Lambda function name SSM parameter."
+    Value: !Ref ParamLambdaFunctionName
+    Export:
+      Name: !Sub "${AWS::StackName}-ParamLambdaFunctionName"
+  ParamLambdaFunctionArn:
+    Description: "The Lambda function ARN SSM parameter."
+    Value: !Ref ParamLambdaFunctionArn
+    Export:
+      Name: !Sub "${AWS::StackName}-ParamLambdaFunctionArn"
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+    - Label:
+        default: "General Configuration"
+      Parameters:
+      - InfrastructureName
+      - AppBaseFolder
+    - Label:
+        default: "Lambda Function Configuration"
+      Parameters:
+      - FunctionName
+      - FunctionHandler
+      - FunctionVersion
+      - FunctionCommit
+      - FunctionS3Bucket
+      - FunctionS3Key
+      - FunctionRuntimeVersion
+      - FunctionTimeout
+    - Label:
+        default: "Tag Configuration"
+      Parameters:
+      - TagEnvironment
+    ParameterLabels:
+      InfrastructureName:
+        default: "Infrastructure Name:"
+      AppBaseFolder:
+        default: "Application BasebFolder:"
+      FunctionName:
+        default: "Lambda Function Name:"
+      FunctionHandler:
+        default: "Function Handler:"
+      FunctionVersion:
+        default: "Lambda Function Version:"
+      FunctionCommit:
+        default: "Function Commit:"
+      FunctionS3Bucket:
+        default: "Function S3 Bucket:"
+      FunctionS3Key:
+        default: "Function S3 Key:"
+      FunctionRuntimeVersion:
+        default: "Runtime Version:"
+      FunctionTimeout:
+        default: "Function Timeout:"
+      # Tag Configuration
+      TagEnvironment:
+        default: "Environment:"
