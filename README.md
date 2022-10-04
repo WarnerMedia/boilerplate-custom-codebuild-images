@@ -1,6 +1,8 @@
-# CodePipeline GitHub API Lambda
+# Custom CodeBuild Docker Images
 
-This repository contains a Lambda function which can interact with the GitHub API and an AWS CodePipeline.
+This is a placeholder repository that will be used by the custom CodeBuild Docker images.
+
+**NOTE:** This repository is not yet complete, so it isn't ready to be used.
 
 ## Table of Contents
 
