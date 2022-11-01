@@ -1,0 +1,156 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Create an ECS image repository (ECR) for CodeBuild images - (v1.0.0)"
+Parameters:
+  # General Configuration
+  InfrastructureName:
+    Type: "String"
+    Description: "A name used to differentiate this infrastructure from other existing infrastructure."
+    Default: "main"
+  # ECR Configuration
+  EcsRepositoryName:
+    Type: "String"
+    Description: "The base name of the ECS Repository (e.g. boilerplate/foo)."
+    Default: "codebuild"
+  EnableExternalAccountAccess:
+    Type: "String"
+    Description: "Should external account access to this repository be enabled?"
+    AllowedValues:
+    - "Yes"
+    - "No"
+    Default: "No"
+  EcrExternalAccounts:
+    Type: "CommaDelimitedList"
+    Description: "A list of Account IDs that can pull from this repository."
+    Default: "arn:aws:iam::222221111111:root"
+  EcrImageCount:
+    Type: "String"
+    Description: "The number of ECR images to keep."
+    Default: "100"
+  EcrImageScanning:
+    Type: "String"
+    Description: "Enable automatic image vulnerability scanning?"
+    AllowedValues:
+    - "true"
+    - "false"
+    Default: "true"
+  EcrImageTagMutability:
+    Type: "String"
+    Description: "Should tags be mutable or immutable?"
+    AllowedValues:
+    - "MUTABLE"
+    - "IMMUTABLE"
+    Default: "MUTABLE"
+Conditions:
+  EnableExternalAccountAccess: !Equals [ !Ref EnableExternalAccountAccess, "Yes" ]
+Resources:
+  CodeBuildEcr:
+    Type: "AWS::ECR::Repository"
+    Properties:
+      RepositoryName: !Sub "${InfrastructureName}/${EcsRepositoryName}"
+      ImageScanningConfiguration:
+        ScanOnPush: !Ref EcrImageScanning
+      ImageTagMutability: !Ref EcrImageTagMutability
+      LifecyclePolicy:
+        LifecyclePolicyText: !Sub |
+          {
+            "rules": [
+            {
+              "rulePriority": 1,
+              "description": "Keep the most recent ${EcrImageCount} images.",
+              "selection": {
+                "tagStatus": "any",
+                "countType": "imageCountMoreThan",
+                "countNumber": ${EcrImageCount}
+              },
+              "action": { "type": "expire" }
+            }]
+          }
+      # Example policies: https://docs.aws.amazon.com/codebuild/latest/userguide/sample-ecr.html
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+        - Sid: "CodeBuildAccessPrincipal"
+          Effect: "Allow"
+          Principal:
+            Service: "codebuild.amazonaws.com"
+          Action:
+          - "ecr:GetDownloadUrlForLayer"
+          - "ecr:BatchGetImage"
+          - "ecr:BatchCheckLayerAvailability"
+        - Sid: "FullAccess"
+          Effect: "Allow"
+          Principal:
+            AWS:
+            - !Sub "arn:aws:iam::${AWS::AccountId}:root"
+          Action:
+          - "ecr:*"
+        - !If
+          - EnableExternalAccountAccess
+          - Sid: "PullOnly"
+            Effect: "Allow"
+            Principal:
+              AWS: !Ref EcrExternalAccounts
+            Action:
+            - "ecr:GetAuthorizationToken"
+            - "ecr:BatchCheckLayerAvailability"
+            - "ecr:GetDownloadUrlForLayer"
+            - "ecr:GetRepositoryPolicy"
+            - "ecr:DescribeRepositories"
+            - "ecr:ListImages"
+            - "ecr:DescribeImages"
+            - "ecr:BatchGetImage"
+            - "ecr:GetLifecyclePolicy"
+            - "ecr:GetLifecyclePolicyPreview"
+            - "ecr:ListTagsForResource"
+            - "ecr:DescribeImageScanFindings"
+          - !Ref "AWS::NoValue"
+      Tags:
+      - Key: "Name"
+        Value: !Ref "AWS::StackName"
+      - Key: "application"
+        Value: !Ref "AWS::StackName"
+      - Key: "contact-email"
+        Value: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/contact-email}}"
+      - Key: "customer"
+        Value: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/customer}}"
+      - Key: "environment"
+        Value: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/environment}}"
+      - Key: "team"
+        Value: !Sub "{{resolve:ssm:/account/${InfrastructureName}/tag/team}}"
+Outputs:
+  Ecr:
+    Description: "The ECS repository that was created."
+    Value: !Ref CodeBuildEcr
+    Export:
+      Name: !Sub "${AWS::StackName}-Ecr"
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+    - Label:
+        default: "General Configuration"
+      Parameters:
+      - InfrastructureName
+    - Label:
+        default: "ECS Repository (ECR) Configuration"
+      Parameters:
+      - EcsRepositoryName
+      - EnableExternalAccountAccess
+      - EcrExternalAccounts
+      - EcrImageCount
+      - EcrImageScanning
+      - EcrImageTagMutability
+    ParameterLabels:
+      InfrastructureName:
+        default: "Infrastructure Name:"
+      EcsRepositoryName:
+        default: "ECS Repository Name:"
+      EnableExternalAccountAccess:
+        default: "Enable External Account Access:"
+      EcrExternalAccounts:
+        default: "ECR External Accounts:"
+      EcrImageCount:
+        default: "ECR Image Count:"
+      EcrImageScanning:
+        default: "ECR Image Scanning:"
+      EcrImageTagMutability:
+        default: "ECR Tag Mutability:"

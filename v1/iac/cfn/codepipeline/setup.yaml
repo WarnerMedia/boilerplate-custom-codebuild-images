@@ -1,19 +1,19 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "Create a CodePipeline for deploying Lambda functions which will be used for GitHub API interactions. - (v1.1.0)"
+Description: "Create a CodePipeline for deploying custom docker images for CodeBuild. - (v1.0.0)"
 Parameters:
   # General Configuration
   SuggestedStackName:
     Type: "String"
     Description: "This is the suggested name for this stack.  If using the console, you can copy and paste this into the stack name field."
-    Default: "main-codepipeline-github-lambdas"
+    Default: "main-custom-codebuild-images"
   InfrastructureName:
     Type: "String"
     Description: "A name used to differentiate this infrastructure from other existing infrastructure."
     Default: "main"
-  LambdaStackNameSuffix:
+  ProjectSuffix:
     Type: "String"
-    Description: "The suffix of the Lambda stack name."
-    Default: "codepipeline-github-lambdas"
+    Description: "This is a suffix to be used by a number of stacks in this project."
+    Default: "custom-codebuild-images"
   # CodePipeline Configuration
   CloudFormationCapabilities:
     Type: "String"
@@ -37,18 +37,6 @@ Parameters:
     Type: "String"
     Description: "The name of the JSON file that contains the version number (needs to be a flat JSON file)."
     Default: "version.json"
-  TestSuffix:
-    Type: "String"
-    Description: "What suffix should be added to the testing version of the function?"
-    Default: "qa"
-  ApprovalMessage:
-    Type: "String"
-    Description: "What message should be displayed on the approval step?"
-    Default: "Are these changes approved to be deployed to the production function?"
-  ProdSuffix:
-    Type: "String"
-    Description: "What suffix should be added to the production version of the function?"
-    Default: "prod"
   SecondRegion:
     Type: "String"
     Description: "You can deploy to two additional regions, if you would like.  What is the second region that you would like this function deployed to?"
@@ -109,7 +97,7 @@ Parameters:
   CodePipelineSourceRepository:
     Type: "String"
     Description: "What is the name of the GitHub repository (should be the repository this file is in)?"
-    Default: "boilerplate-codepipeline-github-lambda"
+    Default: "boilerplate-custom-codebuild-images"
   CodePipelineSourceBranch:
     Type: "String"
     Description: "What is the branch name of the GitHub repository?"
@@ -121,11 +109,11 @@ Parameters:
     AllowedValues:
     - "Yes"
     - "No"
-    Default: "No"
+    Default: "Yes"
   SlackNotificationLambda:
     Type: "String"
     Description: "The name of the Slack notification Lambda (if one has already been created for this region).  It would be recommended to target the testing version for this CodePipeline (to make it easy to test your changes)."
-    Default: "slack-notification-qa"
+    Default: "codepipeline-slack-notification-prod"
 Conditions:
   AppBaseFolder: !Not [ !Equals [ !Ref AppBaseFolder, "" ] ]
   EnableNotifications: !Equals [ !Ref EnableNotifications, "Yes" ]
@@ -209,8 +197,7 @@ Resources:
       ManagedPolicyArns:
       - "arn:aws:iam::aws:policy/AWSCloudFormationFullAccess"
       - "arn:aws:iam::aws:policy/AWSCodePipeline_FullAccess"
-      - "arn:aws:iam::aws:policy/AWSLambda_FullAccess"
-      - "arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess"
+      - "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
       Tags:
       - Key: "Name"
         Value: !Ref "AWS::StackName"
@@ -228,8 +215,8 @@ Resources:
     Type: "AWS::Events::Rule"
     Condition: EnableNotifications
     Properties:
-      Name: !Sub "codepipeline-${InfrastructureName}-${LambdaStackNameSuffix}"
-      Description: !Sub 'Events rule for Slack notifications for the "${InfrastructureName}-${LambdaStackNameSuffix}" CodePipeline.'
+      Name: !Sub "codepipeline-${InfrastructureName}-${ProjectSuffix}"
+      Description: !Sub 'Events rule for Slack notifications for the "${InfrastructureName}-${ProjectSuffix}" CodePipeline.'
       State: "ENABLED"
       EventPattern:
         source:
@@ -247,15 +234,15 @@ Resources:
           - "SUCCEEDED"
           - "SUPERSEDED"
           pipeline:
-          - !Sub "${InfrastructureName}-${LambdaStackNameSuffix}"
+          - !Sub "${InfrastructureName}-${ProjectSuffix}"
       Targets:
       - Arn: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${SlackNotificationLambda}"
-        Id: !Sub "${InfrastructureName}-${LambdaStackNameSuffix}"
+        Id: !Sub "${InfrastructureName}-${ProjectSuffix}"
   DeployCodePipeline:
     Type: "AWS::CodePipeline::Pipeline"
     Properties:
       RoleArn: !GetAtt DeployCodePipelineRole.Arn
-      Name: !Sub "${InfrastructureName}-${LambdaStackNameSuffix}"
+      Name: !Sub "${InfrastructureName}-${ProjectSuffix}"
       RestartExecutionOnUpdate: true
       ArtifactStores:
       - Region: !Ref "AWS::Region"
@@ -301,61 +288,9 @@ Resources:
           OutputArtifacts:
           - Name: "GIT_SOURCE_FILES"
           RunOrder: 1
-      - Name: "Test_Deploy"
+      - Name: "Elastic_Container_Registry"
         Actions:
-        - Name: "Promote_Source_First_Region"
-          ActionTypeId:
-            Category: "Deploy"
-            Owner: "AWS"
-            Provider: "S3"
-            Version: "1"
-          Configuration:
-            BucketName: !Sub "{{resolve:ssm:/s3/${InfrastructureName}/bucket/artifact/name}}"
-            Extract: false
-            ObjectKey: !Sub "${CodePipelineSourceRepository}/${TestSuffix}/#{Source.CommitId}.zip"
-          InputArtifacts:
-          - Name: "GIT_SOURCE_FILES"
-          RunOrder: 1
-          Region: !Ref "AWS::Region"
-        - !If
-          - SecondRegion
-          - Name: "Promote_Source_Second_Region"
-            ActionTypeId:
-              Category: "Deploy"
-              Owner: "AWS"
-              Provider: "S3"
-              Version: "1"
-            Configuration:
-              BucketName: !Sub
-              - "${AccountName}-${InfrastructureName}-artifact-${SecondRegion}"
-              - AccountName: "{{resolve:ssm:/account/name}}"
-              Extract: false
-              ObjectKey: !Sub "${CodePipelineSourceRepository}/${TestSuffix}/#{Source.CommitId}.zip"
-            InputArtifacts:
-            - Name: "GIT_SOURCE_FILES"
-            RunOrder: 1
-            Region: !Ref SecondRegion
-          - !Ref "AWS::NoValue"
-        - !If
-          - ThirdRegion
-          - Name: "Promote_Source_Third_Region"
-            ActionTypeId:
-              Category: "Deploy"
-              Owner: "AWS"
-              Provider: "S3"
-              Version: "1"
-            Configuration:
-              BucketName: !Sub
-              - "${AccountName}-${InfrastructureName}-artifact-${ThirdRegion}"
-              - AccountName: "{{resolve:ssm:/account/name}}"
-              Extract: false
-              ObjectKey: !Sub "${CodePipelineSourceRepository}/${TestSuffix}/#{Source.CommitId}.zip"
-            InputArtifacts:
-            - Name: "GIT_SOURCE_FILES"
-            RunOrder: 1
-            Region: !Ref ThirdRegion
-          - !Ref "AWS::NoValue"
-        - Name: "Lambda_Function_First_Region"
+        - Name: "CodeBuild_ECR_Primary_Region"
           ActionTypeId:
             Category: "Deploy"
             Owner: "AWS"
@@ -363,231 +298,32 @@ Resources:
             Version: "1"
           Configuration:
             ActionMode: !Ref ActionMode
-            StackName: !Sub "${InfrastructureName}-function-${LambdaStackNameSuffix}-${TestSuffix}"
+            StackName: !Sub "${InfrastructureName}-ecr-codebuild-${ProjectSuffix}"
             Capabilities: !Ref CloudFormationCapabilities
             TemplatePath:
               Fn::Sub:
-              - "GIT_SOURCE_FILES::${Folder}iac/cfn/lambda/function.yaml"
+              - "GIT_SOURCE_FILES::${Folder}iac/cfn/ecr/repository/codebuild.yaml"
               - Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
             TemplateConfiguration:
               Fn::Sub:
-              - "GIT_SOURCE_FILES::${Folder}env/cfn/lambda/function.json"
+              - "GIT_SOURCE_FILES::${Folder}env/cfn/ecr/repository/codebuild.json"
               - Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
             RoleArn: !GetAtt DeployCodePipelineRole.Arn
             OutputFileName: "out.json"
-            ParameterOverrides: !Sub
-            - |
+            ParameterOverrides: !Sub |
               {
-                "AppBaseFolder": "${AppBaseFolder}",
-                "FunctionVersion": { "Fn::GetParam" : [ "GIT_SOURCE_FILES", "${Folder}${VersionFile}", "version" ] },
-                "FunctionCommit": "#{Source.CommitId}",
-                "FunctionS3Bucket": "${Bucket}",
-                "FunctionS3Key": "${CodePipelineSourceRepository}/${TestSuffix}/#{Source.CommitId}.zip",
                 "InfrastructureName": "${InfrastructureName}",
-                "TagEnvironment": "${TestSuffix}"
+                "EcsRepositoryName": "${ProjectSuffix}"
               }
-            - Bucket: !Sub "{{resolve:ssm:/s3/${InfrastructureName}/bucket/artifact/name}}"
-              Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
           InputArtifacts:
           - Name: "GIT_SOURCE_FILES"
           OutputArtifacts:
-          - Name: "TEST_LAMBDA_FUNCTION_FIRST_REGION_OUTPUT"
-          RunOrder: 2
-          Region: !Ref "AWS::Region"
-        - !If
-          - SecondRegion
-          - Name: "Lambda_Function_Second_Region"
-            ActionTypeId:
-              Category: "Deploy"
-              Owner: "AWS"
-              Provider: "CloudFormation"
-              Version: "1"
-            Configuration:
-              ActionMode: !Ref ActionMode
-              StackName: !Sub "${InfrastructureName}-function-${LambdaStackNameSuffix}-${TestSuffix}"
-              Capabilities: !Ref CloudFormationCapabilities
-              TemplatePath:
-                Fn::Sub:
-                - "GIT_SOURCE_FILES::${Folder}iac/cfn/lambda/function.yaml"
-                - Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
-              TemplateConfiguration:
-                Fn::Sub:
-                - "GIT_SOURCE_FILES::${Folder}env/cfn/lambda/function.json"
-                - Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
-              RoleArn: !GetAtt DeployCodePipelineRole.Arn
-              OutputFileName: "out.json"
-              ParameterOverrides: !Sub
-              - |
-                {
-                  "AppBaseFolder": "${AppBaseFolder}",
-                  "FunctionVersion": { "Fn::GetParam" : [ "GIT_SOURCE_FILES", "${Folder}${VersionFile}", "version" ] },
-                  "FunctionCommit": "#{Source.CommitId}",
-                  "FunctionS3Bucket": "${Bucket}",
-                  "FunctionS3Key": "${CodePipelineSourceRepository}/${TestSuffix}/#{Source.CommitId}.zip",
-                  "InfrastructureName": "${InfrastructureName}",
-                  "TagEnvironment": "${TestSuffix}"
-                }
-              - Bucket: !Sub
-                - "${AccountName}-${InfrastructureName}-artifact-${SecondRegion}"
-                - AccountName: "{{resolve:ssm:/account/name}}"
-                Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
-            InputArtifacts:
-            - Name: "GIT_SOURCE_FILES"
-            OutputArtifacts:
-            - Name: "TEST_LAMBDA_FUNCTION_SECOND_REGION_OUTPUT"
-            RunOrder: 2
-            Region: !Ref SecondRegion
-          - !Ref "AWS::NoValue"
-        - !If
-          - ThirdRegion
-          - Name: "Lambda_Function_Third_Region"
-            ActionTypeId:
-              Category: "Deploy"
-              Owner: "AWS"
-              Provider: "CloudFormation"
-              Version: "1"
-            Configuration:
-              ActionMode: !Ref ActionMode
-              StackName: !Sub "${InfrastructureName}-function-${LambdaStackNameSuffix}-${TestSuffix}"
-              Capabilities: !Ref CloudFormationCapabilities
-              TemplatePath:
-                Fn::Sub:
-                - "GIT_SOURCE_FILES::${Folder}iac/cfn/lambda/function.yaml"
-                - Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
-              TemplateConfiguration:
-                Fn::Sub:
-                - "GIT_SOURCE_FILES::${Folder}env/cfn/lambda/function.json"
-                - Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
-              RoleArn: !GetAtt DeployCodePipelineRole.Arn
-              OutputFileName: "out.json"
-              ParameterOverrides: !Sub
-              - |
-                {
-                  "AppBaseFolder": "${AppBaseFolder}",
-                  "FunctionVersion": { "Fn::GetParam" : [ "GIT_SOURCE_FILES", "${Folder}${VersionFile}", "version" ] },
-                  "FunctionCommit": "#{Source.CommitId}",
-                  "FunctionS3Bucket": "${Bucket}",
-                  "FunctionS3Key": "${CodePipelineSourceRepository}/${TestSuffix}/#{Source.CommitId}.zip",
-                  "InfrastructureName": "${InfrastructureName}",
-                  "TagEnvironment": "${TestSuffix}"
-                }
-              - Bucket: !Sub
-                - "${AccountName}-${InfrastructureName}-artifact-${ThirdRegion}"
-                - AccountName: "{{resolve:ssm:/account/name}}"
-                Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
-            InputArtifacts:
-            - Name: "GIT_SOURCE_FILES"
-            OutputArtifacts:
-            - Name: "TEST_LAMBDA_FUNCTION_THIRD_REGION_OUTPUT"
-            RunOrder: 2
-            Region: !Ref ThirdRegion
-          - !Ref "AWS::NoValue"
-        - Name: "Approve_Lambda_Update"
-          ActionTypeId:
-            Category: "Approval"
-            Owner: "AWS"
-            Provider: "Manual"
-            Version: "1"
-          Configuration:
-            CustomData: !Ref ApprovalMessage
-            ExternalEntityLink: !Sub "https://github.com/${CodePipelineGitHubOrganization}/${CodePipelineSourceRepository}/commit/#{Source.CommitId}"
-          RunOrder: 3
-      - Name: "Prod_Deploy"
-        Actions:
-        - Name: "Promote_Source_First_Region"
-          ActionTypeId:
-            Category: "Deploy"
-            Owner: "AWS"
-            Provider: "S3"
-            Version: "1"
-          Configuration:
-            BucketName: !Sub "{{resolve:ssm:/s3/${InfrastructureName}/bucket/artifact/name}}"
-            Extract: false
-            ObjectKey: !Sub "${CodePipelineSourceRepository}/${ProdSuffix}/#{Source.CommitId}.zip"
-          InputArtifacts:
-          - Name: "GIT_SOURCE_FILES"
+          - Name: "CODEBUILD_ERC_OUTPUT_PRIMARY_REGION"
           RunOrder: 1
           Region: !Ref "AWS::Region"
         - !If
           - SecondRegion
-          - Name: "Promote_Source_Second_Region"
-            ActionTypeId:
-              Category: "Deploy"
-              Owner: "AWS"
-              Provider: "S3"
-              Version: "1"
-            Configuration:
-              BucketName: !Sub
-              - "${AccountName}-${InfrastructureName}-artifact-${SecondRegion}"
-              - AccountName: "{{resolve:ssm:/account/name}}"
-              Extract: false
-              ObjectKey: !Sub "${CodePipelineSourceRepository}/${ProdSuffix}/#{Source.CommitId}.zip"
-            InputArtifacts:
-            - Name: "GIT_SOURCE_FILES"
-            RunOrder: 1
-            Region: !Ref SecondRegion
-          - !Ref "AWS::NoValue"
-        - !If
-          - ThirdRegion
-          - Name: "Promote_Source_Third_Region"
-            ActionTypeId:
-              Category: "Deploy"
-              Owner: "AWS"
-              Provider: "S3"
-              Version: "1"
-            Configuration:
-              BucketName: !Sub
-              - "${AccountName}-${InfrastructureName}-artifact-${ThirdRegion}"
-              - AccountName: "{{resolve:ssm:/account/name}}"
-              Extract: false
-              ObjectKey: !Sub "${CodePipelineSourceRepository}/${ProdSuffix}/#{Source.CommitId}.zip"
-            InputArtifacts:
-            - Name: "GIT_SOURCE_FILES"
-            RunOrder: 1
-            Region: !Ref ThirdRegion
-          - !Ref "AWS::NoValue"
-        - Name: "Lambda_Function_First_Region"
-          ActionTypeId:
-            Category: "Deploy"
-            Owner: "AWS"
-            Provider: "CloudFormation"
-            Version: "1"
-          Configuration:
-            ActionMode: !Ref ActionMode
-            StackName: !Sub "${InfrastructureName}-function-${LambdaStackNameSuffix}-${ProdSuffix}"
-            Capabilities: !Ref CloudFormationCapabilities
-            TemplatePath:
-              Fn::Sub:
-              - "GIT_SOURCE_FILES::${Folder}iac/cfn/lambda/function.yaml"
-              - Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
-            TemplateConfiguration:
-              Fn::Sub:
-              - "GIT_SOURCE_FILES::${Folder}env/cfn/lambda/function.json"
-              - Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
-            RoleArn: !GetAtt DeployCodePipelineRole.Arn
-            OutputFileName: "out.json"
-            ParameterOverrides: !Sub
-            - |
-              {
-                "AppBaseFolder": "${AppBaseFolder}",
-                "FunctionVersion": { "Fn::GetParam" : [ "GIT_SOURCE_FILES", "${Folder}${VersionFile}", "version" ] },
-                "FunctionCommit": "#{Source.CommitId}",
-                "FunctionS3Bucket": "${Bucket}",
-                "FunctionS3Key": "${CodePipelineSourceRepository}/${ProdSuffix}/#{Source.CommitId}.zip",
-                "InfrastructureName": "${InfrastructureName}",
-                "TagEnvironment": "${ProdSuffix}"
-              }
-            - Bucket: !Sub "{{resolve:ssm:/s3/${InfrastructureName}/bucket/artifact/name}}"
-              Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
-          InputArtifacts:
-          - Name: "GIT_SOURCE_FILES"
-          OutputArtifacts:
-          - Name: "PROD_LAMBDA_FUNCTION_FIRST_REGION_OUTPUT"
-          RunOrder: 2
-          Region: !Ref "AWS::Region"
-        - !If
-          - SecondRegion
-          - Name: "Lambda_Function_Second_Region"
+          - Name: "CodeBuild_ECR_Secondary_Region"
             ActionTypeId:
               Category: "Deploy"
               Owner: "AWS"
@@ -595,43 +331,33 @@ Resources:
               Version: "1"
             Configuration:
               ActionMode: !Ref ActionMode
-              StackName: !Sub "${InfrastructureName}-function-${LambdaStackNameSuffix}-${ProdSuffix}"
+              StackName: !Sub "${InfrastructureName}-ecr-codebuild-${ProjectSuffix}"
               Capabilities: !Ref CloudFormationCapabilities
               TemplatePath:
                 Fn::Sub:
-                - "GIT_SOURCE_FILES::${Folder}iac/cfn/lambda/function.yaml"
+                - "GIT_SOURCE_FILES::${Folder}iac/cfn/ecr/repository/codebuild.yaml"
                 - Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
               TemplateConfiguration:
                 Fn::Sub:
-                - "GIT_SOURCE_FILES::${Folder}env/cfn/lambda/function.json"
+                - "GIT_SOURCE_FILES::${Folder}env/cfn/ecr/repository/codebuild.json"
                 - Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
               RoleArn: !GetAtt DeployCodePipelineRole.Arn
               OutputFileName: "out.json"
-              ParameterOverrides: !Sub
-              - |
+              ParameterOverrides: !Sub |
                 {
-                  "AppBaseFolder": "${AppBaseFolder}",
-                  "FunctionVersion": { "Fn::GetParam" : [ "GIT_SOURCE_FILES", "${Folder}${VersionFile}", "version" ] },
-                  "FunctionCommit": "#{Source.CommitId}",
-                  "FunctionS3Bucket": "${Bucket}",
-                  "FunctionS3Key": "${CodePipelineSourceRepository}/${ProdSuffix}/#{Source.CommitId}.zip",
                   "InfrastructureName": "${InfrastructureName}",
-                  "TagEnvironment": "${ProdSuffix}"
+                  "EcsRepositoryName": "${ProjectSuffix}"
                 }
-              - Bucket: !Sub
-                - "${AccountName}-${InfrastructureName}-artifact-${SecondRegion}"
-                - AccountName: "{{resolve:ssm:/account/name}}"
-                Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
             InputArtifacts:
             - Name: "GIT_SOURCE_FILES"
             OutputArtifacts:
-            - Name: "PROD_LAMBDA_FUNCTION_SECOND_REGION_OUTPUT"
-            RunOrder: 2
+            - Name: "CODEBUILD_ERC_OUTPUT_SECONDARY_REGION"
+            RunOrder: 1
             Region: !Ref SecondRegion
           - !Ref "AWS::NoValue"
         - !If
           - ThirdRegion
-          - Name: "Lambda_Function_Third_Region"
+          - Name: "CodeBuild_ECR_Tertiary_Region"
             ActionTypeId:
               Category: "Deploy"
               Owner: "AWS"
@@ -639,40 +365,211 @@ Resources:
               Version: "1"
             Configuration:
               ActionMode: !Ref ActionMode
-              StackName: !Sub "${InfrastructureName}-function-${LambdaStackNameSuffix}-${ProdSuffix}"
+              StackName: !Sub "${InfrastructureName}-ecr-codebuild-${ProjectSuffix}"
               Capabilities: !Ref CloudFormationCapabilities
               TemplatePath:
                 Fn::Sub:
-                - "GIT_SOURCE_FILES::${Folder}iac/cfn/lambda/function.yaml"
+                - "GIT_SOURCE_FILES::${Folder}iac/cfn/ecr/repository/codebuild.yaml"
                 - Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
               TemplateConfiguration:
                 Fn::Sub:
-                - "GIT_SOURCE_FILES::${Folder}env/cfn/lambda/function.json"
+                - "GIT_SOURCE_FILES::${Folder}env/cfn/ecr/repository/codebuild.json"
                 - Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
               RoleArn: !GetAtt DeployCodePipelineRole.Arn
               OutputFileName: "out.json"
-              ParameterOverrides: !Sub
-              - |
+              ParameterOverrides: !Sub |
                 {
-                  "AppBaseFolder": "${AppBaseFolder}",
-                  "FunctionVersion": { "Fn::GetParam" : [ "GIT_SOURCE_FILES", "${Folder}${VersionFile}", "version" ] },
-                  "FunctionCommit": "#{Source.CommitId}",
-                  "FunctionS3Bucket": "${Bucket}",
-                  "FunctionS3Key": "${CodePipelineSourceRepository}/${ProdSuffix}/#{Source.CommitId}.zip",
                   "InfrastructureName": "${InfrastructureName}",
-                  "TagEnvironment": "${ProdSuffix}"
+                  "EcsRepositoryName": "${ProjectSuffix}"
                 }
-              - Bucket: !Sub
-                - "${AccountName}-${InfrastructureName}-artifact-${ThirdRegion}"
-                - AccountName: "{{resolve:ssm:/account/name}}"
-                Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
             InputArtifacts:
             - Name: "GIT_SOURCE_FILES"
             OutputArtifacts:
-            - Name: "PROD_LAMBDA_FUNCTION_THIRD_REGION_OUTPUT"
-            RunOrder: 2
+            - Name: "CODEBUILD_ERC_OUTPUT_TERTIARY_REGION"
+            RunOrder: 1
             Region: !Ref ThirdRegion
           - !Ref "AWS::NoValue"
+      # - Name: "Prod_Deploy"
+      #   Actions:
+      #   - Name: "Promote_Source_First_Region"
+      #     ActionTypeId:
+      #       Category: "Deploy"
+      #       Owner: "AWS"
+      #       Provider: "S3"
+      #       Version: "1"
+      #     Configuration:
+      #       BucketName: !Sub "{{resolve:ssm:/s3/${InfrastructureName}/bucket/artifact/name}}"
+      #       Extract: false
+      #       ObjectKey: !Sub "${CodePipelineSourceRepository}/${ProdSuffix}/#{Source.CommitId}.zip"
+      #     InputArtifacts:
+      #     - Name: "GIT_SOURCE_FILES"
+      #     RunOrder: 1
+      #     Region: !Ref "AWS::Region"
+      #   - !If
+      #     - SecondRegion
+      #     - Name: "Promote_Source_Second_Region"
+      #       ActionTypeId:
+      #         Category: "Deploy"
+      #         Owner: "AWS"
+      #         Provider: "S3"
+      #         Version: "1"
+      #       Configuration:
+      #         BucketName: !Sub
+      #         - "${AccountName}-${InfrastructureName}-artifact-${SecondRegion}"
+      #         - AccountName: "{{resolve:ssm:/account/name}}"
+      #         Extract: false
+      #         ObjectKey: !Sub "${CodePipelineSourceRepository}/${ProdSuffix}/#{Source.CommitId}.zip"
+      #       InputArtifacts:
+      #       - Name: "GIT_SOURCE_FILES"
+      #       RunOrder: 1
+      #       Region: !Ref SecondRegion
+      #     - !Ref "AWS::NoValue"
+      #   - !If
+      #     - ThirdRegion
+      #     - Name: "Promote_Source_Third_Region"
+      #       ActionTypeId:
+      #         Category: "Deploy"
+      #         Owner: "AWS"
+      #         Provider: "S3"
+      #         Version: "1"
+      #       Configuration:
+      #         BucketName: !Sub
+      #         - "${AccountName}-${InfrastructureName}-artifact-${ThirdRegion}"
+      #         - AccountName: "{{resolve:ssm:/account/name}}"
+      #         Extract: false
+      #         ObjectKey: !Sub "${CodePipelineSourceRepository}/${ProdSuffix}/#{Source.CommitId}.zip"
+      #       InputArtifacts:
+      #       - Name: "GIT_SOURCE_FILES"
+      #       RunOrder: 1
+      #       Region: !Ref ThirdRegion
+      #     - !Ref "AWS::NoValue"
+      #   - Name: "Lambda_Function_First_Region"
+      #     ActionTypeId:
+      #       Category: "Deploy"
+      #       Owner: "AWS"
+      #       Provider: "CloudFormation"
+      #       Version: "1"
+      #     Configuration:
+      #       ActionMode: !Ref ActionMode
+      #       StackName: !Sub "${InfrastructureName}-function-${ProjectSuffix}-${ProdSuffix}"
+      #       Capabilities: !Ref CloudFormationCapabilities
+      #       TemplatePath:
+      #         Fn::Sub:
+      #         - "GIT_SOURCE_FILES::${Folder}iac/cfn/lambda/function.yaml"
+      #         - Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
+      #       TemplateConfiguration:
+      #         Fn::Sub:
+      #         - "GIT_SOURCE_FILES::${Folder}env/cfn/lambda/function.json"
+      #         - Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
+      #       RoleArn: !GetAtt DeployCodePipelineRole.Arn
+      #       OutputFileName: "out.json"
+      #       ParameterOverrides: !Sub
+      #       - |
+      #         {
+      #           "AppBaseFolder": "${AppBaseFolder}",
+      #           "FunctionVersion": { "Fn::GetParam" : [ "GIT_SOURCE_FILES", "${Folder}${VersionFile}", "version" ] },
+      #           "FunctionCommit": "#{Source.CommitId}",
+      #           "FunctionS3Bucket": "${Bucket}",
+      #           "FunctionS3Key": "${CodePipelineSourceRepository}/${ProdSuffix}/#{Source.CommitId}.zip",
+      #           "InfrastructureName": "${InfrastructureName}",
+      #           "TagEnvironment": "${ProdSuffix}"
+      #         }
+      #       - Bucket: !Sub "{{resolve:ssm:/s3/${InfrastructureName}/bucket/artifact/name}}"
+      #         Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
+      #     InputArtifacts:
+      #     - Name: "GIT_SOURCE_FILES"
+      #     OutputArtifacts:
+      #     - Name: "PROD_LAMBDA_FUNCTION_FIRST_REGION_OUTPUT"
+      #     RunOrder: 2
+      #     Region: !Ref "AWS::Region"
+      #   - !If
+      #     - SecondRegion
+      #     - Name: "Lambda_Function_Second_Region"
+      #       ActionTypeId:
+      #         Category: "Deploy"
+      #         Owner: "AWS"
+      #         Provider: "CloudFormation"
+      #         Version: "1"
+      #       Configuration:
+      #         ActionMode: !Ref ActionMode
+      #         StackName: !Sub "${InfrastructureName}-function-${ProjectSuffix}-${ProdSuffix}"
+      #         Capabilities: !Ref CloudFormationCapabilities
+      #         TemplatePath:
+      #           Fn::Sub:
+      #           - "GIT_SOURCE_FILES::${Folder}iac/cfn/lambda/function.yaml"
+      #           - Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
+      #         TemplateConfiguration:
+      #           Fn::Sub:
+      #           - "GIT_SOURCE_FILES::${Folder}env/cfn/lambda/function.json"
+      #           - Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
+      #         RoleArn: !GetAtt DeployCodePipelineRole.Arn
+      #         OutputFileName: "out.json"
+      #         ParameterOverrides: !Sub
+      #         - |
+      #           {
+      #             "AppBaseFolder": "${AppBaseFolder}",
+      #             "FunctionVersion": { "Fn::GetParam" : [ "GIT_SOURCE_FILES", "${Folder}${VersionFile}", "version" ] },
+      #             "FunctionCommit": "#{Source.CommitId}",
+      #             "FunctionS3Bucket": "${Bucket}",
+      #             "FunctionS3Key": "${CodePipelineSourceRepository}/${ProdSuffix}/#{Source.CommitId}.zip",
+      #             "InfrastructureName": "${InfrastructureName}",
+      #             "TagEnvironment": "${ProdSuffix}"
+      #           }
+      #         - Bucket: !Sub
+      #           - "${AccountName}-${InfrastructureName}-artifact-${SecondRegion}"
+      #           - AccountName: "{{resolve:ssm:/account/name}}"
+      #           Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
+      #       InputArtifacts:
+      #       - Name: "GIT_SOURCE_FILES"
+      #       OutputArtifacts:
+      #       - Name: "PROD_LAMBDA_FUNCTION_SECOND_REGION_OUTPUT"
+      #       RunOrder: 2
+      #       Region: !Ref SecondRegion
+      #     - !Ref "AWS::NoValue"
+      #   - !If
+      #     - ThirdRegion
+      #     - Name: "Lambda_Function_Third_Region"
+      #       ActionTypeId:
+      #         Category: "Deploy"
+      #         Owner: "AWS"
+      #         Provider: "CloudFormation"
+      #         Version: "1"
+      #       Configuration:
+      #         ActionMode: !Ref ActionMode
+      #         StackName: !Sub "${InfrastructureName}-function-${ProjectSuffix}-${ProdSuffix}"
+      #         Capabilities: !Ref CloudFormationCapabilities
+      #         TemplatePath:
+      #           Fn::Sub:
+      #           - "GIT_SOURCE_FILES::${Folder}iac/cfn/lambda/function.yaml"
+      #           - Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
+      #         TemplateConfiguration:
+      #           Fn::Sub:
+      #           - "GIT_SOURCE_FILES::${Folder}env/cfn/lambda/function.json"
+      #           - Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
+      #         RoleArn: !GetAtt DeployCodePipelineRole.Arn
+      #         OutputFileName: "out.json"
+      #         ParameterOverrides: !Sub
+      #         - |
+      #           {
+      #             "AppBaseFolder": "${AppBaseFolder}",
+      #             "FunctionVersion": { "Fn::GetParam" : [ "GIT_SOURCE_FILES", "${Folder}${VersionFile}", "version" ] },
+      #             "FunctionCommit": "#{Source.CommitId}",
+      #             "FunctionS3Bucket": "${Bucket}",
+      #             "FunctionS3Key": "${CodePipelineSourceRepository}/${ProdSuffix}/#{Source.CommitId}.zip",
+      #             "InfrastructureName": "${InfrastructureName}",
+      #             "TagEnvironment": "${ProdSuffix}"
+      #           }
+      #         - Bucket: !Sub
+      #           - "${AccountName}-${InfrastructureName}-artifact-${ThirdRegion}"
+      #           - AccountName: "{{resolve:ssm:/account/name}}"
+      #           Folder: !If [ AppBaseFolder, !Sub "${AppBaseFolder}/", "" ]
+      #       InputArtifacts:
+      #       - Name: "GIT_SOURCE_FILES"
+      #       OutputArtifacts:
+      #       - Name: "PROD_LAMBDA_FUNCTION_THIRD_REGION_OUTPUT"
+      #       RunOrder: 2
+      #       Region: !Ref ThirdRegion
+      #     - !Ref "AWS::NoValue"
       Tags:
       - Key: "Name"
         Value: !Ref "AWS::StackName"
@@ -736,7 +633,6 @@ Metadata:
       Parameters:
       - SuggestedStackName
       - InfrastructureName
-      - LambdaStackNameSuffix 
     - Label:
         default: "CodePipeline Configuration"
       Parameters:
@@ -744,9 +640,6 @@ Metadata:
       - AppBaseFolder
       - ActionMode
       - VersionFile
-      - TestSuffix
-      - ApprovalMessage
-      - ProdSuffix
       - SecondRegion
       - ThirdRegion
     - Label:
@@ -766,8 +659,6 @@ Metadata:
         default: "Suggested Stack Name:"
       InfrastructureName:
         default: "Infrastructure Name:"
-      LambdaStackNameSuffix:
-        default: "Lambda Stack Name Suffix:"
       # CodePipeline Configuration
       CloudFormationCapabilities:
         default: "CloudFormation Capabilities:"
@@ -777,12 +668,6 @@ Metadata:
         default: "Action Mode:"
       VersionFile:
         default: "Version File:"
-      TestSuffix:
-        default: "Test Suffix:"
-      ProdSuffix:
-        default: "Prod Suffix:"
-      ApprovalMessage:
-        default: "Approval Message:"
       SecondRegion:
         default: "Second Region:"
       ThirdRegion:
