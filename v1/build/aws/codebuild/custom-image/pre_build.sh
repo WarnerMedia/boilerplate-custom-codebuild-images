@@ -162,20 +162,20 @@ retrieve_github_repository () {
 update_version () {
 
   echo "Checking if the Docker image already exists in the \"$AWS_REGION\" region..."
-  check_docker_image "$IMAGE_REPO_NAME" "$VERSION_TAG"
+  check_docker_image "$IMAGE_REPO_NAME" "$CUSTOM_IMAGE_TAG-$VERSION_TAG"
 
   if [ "$AWS_SECOND_REGION" = "NONE" ]; then
     echo "The second region wasn't set, so not going to check that region..."
   else
     echo "Attempting to pull this image to see if it already exists in the \"$AWS_SECOND_REGION\" region..."
-    check_docker_image "$IMAGE_REPO_NAME" "$VERSION_TAG" "$AWS_SECOND_REGION"
+    check_docker_image "$IMAGE_REPO_NAME" "$CUSTOM_IMAGE_TAG-$VERSION_TAG" "$AWS_SECOND_REGION"
   fi
 
   if [ "$AWS_THIRD_REGION" = "NONE" ]; then
     echo "The third region wasn't set, so not going to check that region..."
   else
     echo "Attempting to pull this image to see if it already exists in the \"$AWS_THIRD_REGION\" region..."
-    check_docker_image "$IMAGE_REPO_NAME" "$VERSION_TAG" "$AWS_THIRD_REGION"
+    check_docker_image "$IMAGE_REPO_NAME" "$CUSTOM_IMAGE_TAG-$VERSION_TAG" "$AWS_THIRD_REGION"
   fi
 
 }
