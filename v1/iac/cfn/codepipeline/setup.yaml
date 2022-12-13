@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "Create a CodePipeline for deploying custom docker images for CodeBuild. - (v1.3.2)"
+Description: "Create a CodePipeline for deploying custom docker images for CodeBuild. - (v1.3.3)"
 Parameters:
   # General Configuration
   SuggestedStackName:
@@ -240,9 +240,10 @@ Resources:
             - !Sub "arn:aws:s3:::{{resolve:ssm:/account/name}}-${InfrastructureName}-artifact*/*"
             - !Sub "arn:aws:s3:::{{resolve:ssm:/account/name}}-${InfrastructureName}-codepipeline*/*"
       ManagedPolicyArns:
-      - "arn:aws:iam::aws:policy/AWSCloudFormationFullAccess"
-      - "arn:aws:iam::aws:policy/AWSCodePipeline_FullAccess"
       - "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
+      - "arn:aws:iam::aws:policy/AWSCloudFormationFullAccess"
+      - "arn:aws:iam::aws:policy/AWSCodeBuildAdminAccess"
+      - "arn:aws:iam::aws:policy/AWSCodePipeline_FullAccess"
       Tags:
       - Key: "Name"
         Value: !Ref "AWS::StackName"

@@ -27,7 +27,7 @@ RUN git clone --single-branch --depth 1 -b ${AWS_CLI_VERSION} https://github.com
 
 WORKDIR /aws-cli
 RUN sed -i'' 's/PyInstaller.*/PyInstaller==5.2/g' requirements-build.txt
-RUN ln -s /usr/bin/python3 /usr/bin/python
+# RUN ln -s /usr/bin/python3 /usr/bin/python
 RUN python -m venv venv
 RUN . venv/bin/activate
 RUN scripts/installers/make-exe
