@@ -98,14 +98,9 @@ if [ "$RUN_DEPLOY" = "true" ]; then
     push_docker_image "$SECOND_REGION_DOCKER_URL" "$AWS_SECOND_REGION"
   fi
 
-  if [ "$PROD_FIRST_REGION_DOCKER_URL" != "NONE" ]; then
-    echo "Pushing the docker image to the production first region..."
-    push_docker_image "$PROD_FIRST_REGION_DOCKER_URL" "$AWS_REGION" "$AWS_ECR_PROD_ACCOUNT_ID"
-  fi
-
-  if [ "$PROD_SECOND_REGION_DOCKER_URL" != "NONE" ]; then
-    echo "Pushing the docker image to the production second region..."
-    push_docker_image "$PROD_SECOND_REGION_DOCKER_URL" "$AWS_SECOND_REGION" "$AWS_ECR_PROD_ACCOUNT_ID"
+  if [ "$THIRD_REGION_DOCKER_URL" != "NONE" ]; then
+    echo "Pushing the docker image to the third region..."
+    push_docker_image "$THIRD_REGION_DOCKER_URL" "$AWS_THIRD_REGION"
   fi
 
   echo "Building the output artifact..."

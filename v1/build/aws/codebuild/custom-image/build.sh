@@ -133,24 +133,17 @@ if [ "$RUN_BUILD" = "true" ]; then
   tag_docker_image "$IMAGE_REPO_NAME" "$CUSTOM_IMAGE_TAG" "$FIRST_REGION_DOCKER_URL"
 
   if [ "$SECOND_REGION_DOCKER_URL" != "NONE" ]; then
-    echo "Tag the image for the secondary region..."
+    echo "Tag the image for the second region..."
     tag_docker_image "$IMAGE_REPO_NAME" "$CUSTOM_IMAGE_TAG" "$SECOND_REGION_DOCKER_URL"
   else
-    echo "The secondary region wasn't set, so not going to tag anything for that region..."
+    echo "The second region wasn't set, so not going to tag anything for that region..."
   fi
 
-  if [ "$PROD_FIRST_REGION_DOCKER_URL" != "NONE" ]; then
-    echo "Tag the image for the production primary region..."
-    tag_docker_image "$IMAGE_REPO_NAME" "$CUSTOM_IMAGE_TAG" "$PROD_FIRST_REGION_DOCKER_URL"
+  if [ "$THIRD_REGION_DOCKER_URL" != "NONE" ]; then
+    echo "Tag the image for the third region..."
+    tag_docker_image "$IMAGE_REPO_NAME" "$CUSTOM_IMAGE_TAG" "$THIRD_REGION_DOCKER_URL"
   else
-    echo "The primary production region wasn't set, so not going to tag anything for that region..."
-  fi
-
-  if [ "$PROD_SECOND_REGION_DOCKER_URL" != "NONE" ]; then
-    echo "Tag the image for the production secondary region..."
-    tag_docker_image "$IMAGE_REPO_NAME" "$CUSTOM_IMAGE_TAG" "$PROD_SECOND_REGION_DOCKER_URL"
-  else
-    echo "The secondary production region wasn't set, so not going to tag anything for that region..."
+    echo "The third region wasn't set, so not going to tag anything for that region..."
   fi
 
 else
