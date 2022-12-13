@@ -17,7 +17,6 @@ Parameters:
   ProjectName:
     Type: "String"
     Description: "The base name of the CodePipeline project (e.g. foo-bar-baz)."
-    Default: "boilerplate-fargate-appconfig"
   SecondRegion:
     Type: "String"
     Description: "What is the second region this service should be deployed to?"
@@ -25,7 +24,50 @@ Parameters:
     - "NONE"
     - "us-east-1"
     - "us-east-2"
+    - "us-west-1"
     - "us-west-2"
+    - "af-south-1"
+    - "ap-east-1"
+    - "ap-south-1"
+    - "ap-northeast-2"
+    - "ap-southeast-1"
+    - "ap-southeast-2"
+    - "ap-northeast-1"
+    - "ca-central-1"
+    - "eu-central-1"
+    - "eu-west-1"
+    - "eu-west-2"
+    - "eu-south-1"
+    - "eu-west-3"
+    - "eu-north-1"
+    - "me-south-1"
+    - "sa-east-1"
+    Default: "us-east-2"
+  ThirdRegion:
+    Type: "String"
+    Description: "What is the third region this service should be deployed to?"
+    AllowedValues:
+    - "NONE"
+    - "us-east-1"
+    - "us-east-2"
+    - "us-west-1"
+    - "us-west-2"
+    - "af-south-1"
+    - "ap-east-1"
+    - "ap-south-1"
+    - "ap-northeast-2"
+    - "ap-southeast-1"
+    - "ap-southeast-2"
+    - "ap-northeast-1"
+    - "ca-central-1"
+    - "eu-central-1"
+    - "eu-west-1"
+    - "eu-west-2"
+    - "eu-south-1"
+    - "eu-west-3"
+    - "eu-north-1"
+    - "me-south-1"
+    - "sa-east-1"
     Default: "us-east-2"
   # CodeBuild Configuration
   CodeBuildRoleArn:
@@ -34,8 +76,7 @@ Parameters:
   CodeBuildSpecPath:
     Type: "String"
     Description: "The path and file name for the main BuildSpec file."
-    Default: "build/aws/codebuild/buildspec/build/amzn2.yaml"
-  CodeBuildGitHubOAuthTokenName:
+  CodeBuildGitHubOAuthTokenKey:
     Type: "String"
     Description: "This is the name and key of the Secrets Manager secret which contains the GitHub OAuth token for source repository access."
   DockerHubUsernameKey:
@@ -58,7 +99,6 @@ Parameters:
     Description: "Which Docker version do you want to use? For other images/runtimes, try to create a project through the interface."
     AllowedValues:
     - "aws/codebuild/amazonlinux2-x86_64-standard:4.0"
-    Default: "aws/codebuild/amazonlinux2-x86_64-standard:4.0"
   CodeBuildCustomDockerImage:
     Type: "String"
     Description: "Custom ECR docker image for CodeBuild."
@@ -70,7 +110,6 @@ Parameters:
   EcsRepositoryName:
     Type: "String"
     Description: "The base name of the ECS Repository (e.g. boilerplate/foo). The environment will automatically be added to the end."
-    Default: "boilerplate/fargate-nodejs"
   # Tags
   TagEnvironment:
     Type: "String"
@@ -99,18 +138,18 @@ Resources:
           Value: !Ref AppBaseFolder
         - Name: "AWS_ACCOUNT_ID"
           Value: !Ref "AWS::AccountId"
-        - Name: "AWS_ECR_PROD_ACCOUNT_ID"
-          Value: !Ref EcrProdAccount
         - Name: "AWS_SECOND_REGION"
           Value: !Ref SecondRegion
+        - Name: "AWS_THIRD_REGION"
+          Value: !Ref ThirdRegion
         - Name: "CUSTOM_IMAGE_PATH"
           Value: !Ref CustomImagePath
         - Name: "DOCKERHUB_USERNAME_KEY"
           Value: !Ref DockerHubUsernameKey
         - Name: "DOCKERHUB_TOKEN_KEY"
           Value: !Ref DockerHubTokenKey
-        - Name: "GITHUB_OAUTH_TOKEN_NAME"
-          Value: !Ref CodeBuildGitHubOAuthTokenName
+        - Name: "GITHUB_OAUTH_TOKEN_KEY"
+          Value: !Ref CodeBuildGitHubOAuthTokenKey
         - Name: "IMAGE_REPO_NAME"
           Value: !Ref EcsRepositoryName
         - Name: "S3_ARTIFACT_BUCKET"
@@ -165,9 +204,9 @@ Metadata:
       Parameters:
       - AppBaseFolder
       - CustomImagePath
-      - EcrProdAccount
       - ProjectName
       - SecondRegion
+      - ThirdRegion
     - Label:
         default: "ECS Repository (ECR) Configuration"
       Parameters:
@@ -177,7 +216,7 @@ Metadata:
       Parameters:
       - CodeBuildRoleArn
       - CodeBuildSpecPath
-      - CodeBuildGitHubOAuthTokenName
+      - CodeBuildGitHubOAuthTokenKey
       - CodeBuildComputeType
       - CodeBuildCustomDockerImage
       - CodeBuildDockerImage
@@ -197,12 +236,12 @@ Metadata:
         default: "CodePipeline Application Base Folder:"
       CustomImagePath:
         default: "Custom Image Path:"
-      EcrProdAccount:
-        default: "ECR Production Account:"
       ProjectName:
         default: "CodePipeline Project Name:"
       SecondRegion:
         default: "Second Region:"
+      ThirdRegion:
+        default: "Third Region:"
       # ECS Configuration
       EcsRepositoryName:
         default: "ECS Repository:"
@@ -211,8 +250,8 @@ Metadata:
         default: "CodeBuild Role ARN:"
       CodeBuildSpecPath:
         default: "CodeBuild Main BuildSpec Path:"
-      CodeBuildGitHubOAuthTokenName:
-        default: "GitHub OAuth Token Name:"
+      CodeBuildGitHubOAuthTokenKey:
+        default: "GitHub OAuth Token Key:"
       CodeBuildComputeType:
         default: "CodeBuild Compute Type:"
       CodeBuildCustomDockerImage:

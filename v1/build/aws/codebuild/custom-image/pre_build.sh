@@ -11,7 +11,6 @@ echo "Pre-Build Started on $(date)"
 DEFAULT_IMAGE_TAG="latest"
 RUN_BUILD="false"
 UPDATE_METADATA_FILE="false"
-METADATA_FILE_UPDATED="false"
 METADATA_FILE="metadata.json"
 GIT_METADATA_FILE="git-metadata.json"
 
@@ -162,66 +161,6 @@ retrieve_github_repository () {
   fi
 }
 
-# update_metadata_file () {
-#   local owner="$1"
-#   local repository="$2"
-#   local base_folder="$3"
-#   local custom_image_path="$4"
-#   local filename="$5"
-#   local token="$6"
-#   local branch="$7"
-#   local message="$8"
-#   local content=$(base64 --wrap=0 ./$filename)
-#   local sha="NONE"
-#   local full_path="NONE"
-#   local put_response="NONE"
-
-#   echo "The git branch: $branch"
-
-#   if [ -z "$base_folder" ]; then
-#     echo "No base folder is set, getting the \"$filename\" from the root directory..."
-#     full_path="repos/$owner/$repository/contents/$custom_image_path/$filename"
-#     sha=$(curl -s -X GET https://api.github.com/$full_path?ref=$branch -H "Authorization: token $token" | jq -r .sha)
-#   else
-#     echo "Base folder is set, getting the \"$filename\" from the \"$base_folder\" directory..."
-#     full_path="repos/$owner/$repository/contents/$base_folder/$custom_image_path/$filename"
-#     sha=$(curl -s -X GET https://api.github.com/$full_path?ref=$branch -H "Authorization: token $token" | jq -r .sha)
-#   fi
-
-#   check_status $? "GitHub"
-
-#   echo "File SHA is: $sha"
-
-#   put_response=$(curl -s -X PUT https://api.github.com/$full_path \
-#   -H "Authorization: token $token" \
-#   -d @- << EOF
-# {
-#   "branch": "$branch",
-#   "content": "$content",
-#   "message": "$message",
-#   "sha": "$sha"
-# }
-# EOF
-# )
-
-#   check_status $? "GitHub"
-
-#   echo "Get the updated SHA..."
-#   sha=$(echo "$put_response" | jq -r .commit.sha)
-
-#   echo "Updated SHA: $sha"
-
-#   if [ $(echo -n "$sha" | wc -m) -eq 40 ]; then
-#     echo "Updating the full git SHA to \"$sha\"..."
-#     GIT_FULL_REVISION="$sha"
-#     GIT_SHORT_REVISION=$(echo "$sha" | cut -c1-7)
-#   else
-#     echo "Didn't get a valid SHA back from GitHub..."
-#     exit 1
-#   fi
-
-# }
-
 update_version () {
 
   echo "Checking if the Docker image already exists in the \"$AWS_REGION\" region..."
@@ -234,19 +173,12 @@ update_version () {
     check_docker_image "$IMAGE_REPO_NAME" "$VERSION_TAG" "$AWS_SECOND_REGION"
   fi
 
-#  if [ "$UPDATE_METADATA_FILE" = "true" ]; then
-#    METADATA_FILE_UPDATED="true"
-#
-#    echo "Automatically bumping the METADATA SemVer patch version..."
-#
-#    VERSION=$(increment_semver_patch_level "$VERSION" "$METADATA_FILE")
-#
-#    echo "Using the standard version tag..."
-#    VERSION_TAG="version-$VERSION"
-#
-#    #Check again to make sure the version we just set isn't already in use...
-#    update_version
-#  fi
+  if [ "$AWS_THIRD_REGION" = "NONE" ]; then
+    echo "The third region wasn't set, so not going to check that region..."
+  else
+    echo "Attempting to pull this image to see if it already exists in the \"$AWS_THIRD_REGION\" region..."
+    check_docker_image "$IMAGE_REPO_NAME" "$VERSION_TAG" "$AWS_THIRD_REGION"
+  fi
 
 }
 
@@ -352,18 +284,11 @@ else
   SECOND_REGION_DOCKER_URL=$(build_docker_url "$AWS_ACCOUNT_ID" "$AWS_SECOND_REGION" "$IMAGE_REPO_NAME")
 fi
 
-#Production docker URL...
-if [ -z "$AWS_ECR_PROD_ACCOUNT_ID" ]; then
-  echo "No ECR production Account ID was passed in, so not building the docker URL(s) for production."
-  PROD_FIRST_REGION_DOCKER_URL="NONE"
+if [ "$AWS_THIRD_REGION" = "NONE" ]; then
+  echo "The third region was not set, so not building the docker URL for the third region."
+  THIRD_REGION_DOCKER_URL="NONE"
 else
-  PROD_FIRST_REGION_DOCKER_URL=$(build_docker_url "$AWS_ECR_PROD_ACCOUNT_ID" "$AWS_REGION" "$IMAGE_REPO_NAME")
-  if [ "$AWS_SECOND_REGION" = "NONE" ]; then
-    echo "The second region was not set, so not building the production docker URL for the second region."
-    PROD_SECOND_REGION_DOCKER_URL="NONE"
-  else
-    PROD_SECOND_REGION_DOCKER_URL=$(build_docker_url "$AWS_ECR_PROD_ACCOUNT_ID" "$AWS_SECOND_REGION" "$IMAGE_REPO_NAME")
-  fi
+  THIRD_REGION_DOCKER_URL=$(build_docker_url "$AWS_ACCOUNT_ID" "$AWS_THIRD_REGION" "$IMAGE_REPO_NAME")
 fi
 
 #------------------------------------------------------------------------
@@ -379,15 +304,6 @@ update_version_tag
 
 #Update the version, if needed.
 update_version
-
-#Update the version tag...
-# update_version_tag
-
-#Update the version in GitHub if we had to advance the version...
-# if [ "$METADATA_FILE_UPDATED" = "true" ]; then
-#   #Update the patch version...
-#   update_metadata_file "$GITHUB_ORGANIZATION" "$GITHUB_REPOSITORY" "$APP_BASE_FOLDER" "$CUSTOM_IMAGE_PATH/$/$CUSTOM_IMAGE_TAG" "$METADATA_FILE" "$GITHUB_TOKEN" "$GIT_BRANCH" "Automatic patch version update to: $VERSION"
-# fi
 
 echo "Setting some build tags..."
 BUILD_ID_TAG="codebuild-$BUILD_ID"
@@ -417,8 +333,7 @@ echo "Short git revision is: $GIT_SHORT_REVISION"
 echo "Current time in the Eastern Time Zone is: $DATETIME_ET"
 echo "First region docker URL: $FIRST_REGION_DOCKER_URL"
 echo "Second region docker URL: $SECOND_REGION_DOCKER_URL"
-echo "Production first region docker URL: $PROD_FIRST_REGION_DOCKER_URL"
-echo "Production second region docker URL: $PROD_SECOND_REGION_DOCKER_URL"
+echo "Third region docker URL: $THIRD_REGION_DOCKER_URL"
 
 #------------------------------------------------------------------------
 # END: Output a number of variables
@@ -441,10 +356,9 @@ export_variable "GIT_SHORT_REVISION"
 export_variable "GITHUB_ORGANIZATION"
 export_variable "GITHUB_REPOSITORY"
 export_variable "NAME"
-export_variable "PROD_FIRST_REGION_DOCKER_URL"
-export_variable "PROD_SECOND_REGION_DOCKER_URL"
 export_variable "RUN_BUILD"
 export_variable "SECOND_REGION_DOCKER_URL"
+export_variable "THIRD_REGION_DOCKER_URL"
 export_variable "VERSION"
 export_variable "VERSION_TAG"
 
