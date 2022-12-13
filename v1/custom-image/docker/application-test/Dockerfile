@@ -26,7 +26,7 @@ ARG AWS_CLI_VERSION=2.7.29
 RUN git clone --single-branch --depth 1 -b ${AWS_CLI_VERSION} https://github.com/aws/aws-cli.git
 
 WORKDIR /aws-cli
-RUN sed -i'' 's/PyInstaller.*/PyInstaller==5.2/g' requirements-build.txt
+# RUN sed -i'' 's/PyInstaller.*/PyInstaller==5.2/g' requirements-build.txt
 # RUN ln -s /usr/bin/python3 /usr/bin/python
 RUN python -m venv venv
 RUN . venv/bin/activate
