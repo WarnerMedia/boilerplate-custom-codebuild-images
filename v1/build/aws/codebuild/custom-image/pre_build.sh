@@ -11,8 +11,6 @@ echo "Pre-Build Started on $(date)"
 DEFAULT_IMAGE_TAG="latest"
 RUN_BUILD="false"
 UPDATE_METADATA_FILE="false"
-METADATA_FILE="metadata.json"
-GIT_METADATA_FILE="git-metadata.json"
 
 #Create a file for transporting variables to other phases.
 touch /tmp/pre_build
@@ -232,42 +230,11 @@ echo "Extract the CodePipeline name and CodeBuild ID..."
 CURRENT_PIPELINE=$(printf "%s" "$CODEBUILD_INITIATOR" | rev | cut -d/ -f1 | rev)
 BUILD_ID=$(printf "%s" "$CODEBUILD_BUILD_ID" | sed "s/.*:\([[:xdigit:]]\{7\}\).*/\1/")
 
-#Check if the git metadata JSON file exists...
-if [ -f "$CODEBUILD_SRC_DIR/$GIT_METADATA_FILE" ]; then
-  echo "The \"$GIT_METADATA_FILE\" file exists."
-else
-  echo "The \"$GIT_METADATA_FILE\" file does not exist and is required in order to proceed."
-  exit 1
-fi
-
-#Set some git variables...
-echo "Get the remote origin URL..."
-GIT_REMOTE_URL=$(cat "$CODEBUILD_SRC_DIR/$GIT_METADATA_FILE" | jq -r '.remoteUrl')
-
-echo "Get the full git revision..."
-GIT_FULL_REVISION=$(cat "$CODEBUILD_SRC_DIR/$GIT_METADATA_FILE" | jq -r '.fullRevision')
-
-echo "Get the short git revision..."
-GIT_SHORT_REVISION=$(cat "$CODEBUILD_SRC_DIR/$GIT_METADATA_FILE" | jq -r '.shortRevision')
-
-echo "Get the git branch..."
-GIT_BRANCH=$(cat "$CODEBUILD_SRC_DIR/$GIT_METADATA_FILE" | jq -r '.branch')
-
-echo "Retrieve the GitHub organization..."
-GITHUB_ORGANIZATION=$(cat "$CODEBUILD_SRC_DIR/$GIT_METADATA_FILE" | jq -r '.organization')
-
-echo "Retrieve the GitHub repository..."
-GITHUB_REPOSITORY=$(cat "$CODEBUILD_SRC_DIR/$GIT_METADATA_FILE" | jq -r '.repository')
-
 check_variable "$GIT_REMOTE_URL" "git remote URL"
 
 check_variable "$GIT_FULL_REVISION" "git full revision"
 
-check_variable "$GIT_SHORT_REVISION" "git short revision"
-
 check_variable "$GIT_BRANCH" "git branch"
-
-check_variable "$GITHUB_ORGANIZATION" "GitHub organization"
 
 check_variable "$GITHUB_REPOSITORY" "GitHub repository"
 
@@ -329,7 +296,6 @@ echo "Version tag is: $VERSION_TAG"
 echo "Initiating CodePipeline is: $CODEBUILD_INITIATOR"
 echo "Current CodePipeline name is: $CURRENT_PIPELINE"
 echo "Full git revision is: $GIT_FULL_REVISION"
-echo "Short git revision is: $GIT_SHORT_REVISION"
 echo "Current time in the Eastern Time Zone is: $DATETIME_ET"
 echo "First region docker URL: $FIRST_REGION_DOCKER_URL"
 echo "Second region docker URL: $SECOND_REGION_DOCKER_URL"
@@ -352,8 +318,6 @@ export_variable "FIRST_REGION_DOCKER_URL"
 export_variable "GIT_BRANCH"
 export_variable "GIT_FULL_REVISION"
 export_variable "GIT_REVISION_TAG"
-export_variable "GIT_SHORT_REVISION"
-export_variable "GITHUB_ORGANIZATION"
 export_variable "GITHUB_REPOSITORY"
 export_variable "NAME"
 export_variable "RUN_BUILD"
