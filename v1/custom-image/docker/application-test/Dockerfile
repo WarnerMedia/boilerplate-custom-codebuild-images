@@ -34,13 +34,14 @@ RUN scripts/installers/make-exe
 RUN unzip -q dist/awscli-exe.zip
 RUN aws/install --bin-dir /aws-cli-bin
 
-RUN echo "alpine version: $(cat /etc/alpine-release)" \
+RUN echo "Version Information:" \
+    && echo "alpine version: $(cat /etc/alpine-release)" \
     && aws --version \
     && curl --version \
     && docker -v \
     && docker-compose --version \
     && git --version \
-    && jq -V \
+    && jq --version \
     && echo "npm: $(npm --version)" \
     && echo "node: $(node --version)" \
     && echo python --version \

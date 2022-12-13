@@ -33,11 +33,12 @@ RUN sed -i'' 's/PyInstaller.*/PyInstaller==5.2/g' requirements-build.txt \
     && unzip -q dist/awscli-exe.zip \
     && aws/install --bin-dir /usr/local/bin
 
-RUN echo "alpine version: $(cat /etc/alpine-release)" \
+RUN echo "Version Information:" \
+    && echo "alpine version: $(cat /etc/alpine-release)" \
     && aws --version \
     && curl --version \
     && git --version \
-    && jq -V \
+    && jq --version \
     && echo "npm: $(npm --version)" \
     && echo "node: $(node --version)" \
     && echo python --version \
