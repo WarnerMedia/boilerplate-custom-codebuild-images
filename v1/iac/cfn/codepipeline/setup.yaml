@@ -35,7 +35,7 @@ Parameters:
     Default: "REPLACE_ON_FAILURE"
   MetadataFile:
     Type: "String"
-    Description: "The name of the JSON file that contains project metadata, like the version number (needs to be a flat JSON file)."
+    Description: "The name of the JSON file that contains project or image metadata, like the version number (needs to be a flat JSON file)."
     Default: "metadata.json"
   SecondRegion:
     Type: "String"
@@ -94,7 +94,7 @@ Parameters:
   CodePipelineGitHubOrganization:
     Type: "String"
     Description: "The GitHub organization that the repository is a part of."
-    Default: "warnermedia"
+    Default: "WarnerMedia"
   CodePipelineSourceRepository:
     Type: "String"
     Description: "What is the name of the GitHub repository (should be the repository this file is in)?"
