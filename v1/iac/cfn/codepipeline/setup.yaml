@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "Create a CodePipeline for deploying custom docker images for CodeBuild. - (v1.2.0)"
+Description: "Create a CodePipeline for deploying custom docker images for CodeBuild. - (v1.3.2)"
 Parameters:
   # General Configuration
   SuggestedStackName:
@@ -33,10 +33,10 @@ Parameters:
     - "DELETE_ONLY"
     - "REPLACE_ON_FAILURE"
     Default: "REPLACE_ON_FAILURE"
-  VersionFile:
+  MetadataFile:
     Type: "String"
-    Description: "The name of the JSON file that contains the version number (needs to be a flat JSON file)."
-    Default: "version.json"
+    Description: "The name of the JSON file that contains project metadata, like the version number (needs to be a flat JSON file)."
+    Default: "metadata.json"
   SecondRegion:
     Type: "String"
     Description: "You can deploy to two additional regions, if you would like.  What is the second region that you would like this function deployed to?"
@@ -522,6 +522,196 @@ Resources:
             RunOrder: 1
             Region: !Ref "AWS::Region"
         - !Ref "AWS::NoValue"
+      - Name: "Image_Build"
+        Actions:
+        - Name: "Application_Test_Image"
+          ActionTypeId:
+            Category: "Build"
+            Owner: "AWS"
+            Provider: "CodeBuild"
+            Version: "1"
+          Configuration:
+            ProjectName: !Sub "custom-image-${ProjectSuffix}"
+            PrimarySource: "GIT_SOURCE_FILES"
+            EnvironmentVariables: !Sub |
+              [
+                {
+                  "name":"CUSTOM_IMAGE_TAG",
+                  "value":"application-test",
+                  "type":"PLAINTEXT"
+                },
+                {
+                  "name":"METADATA_FILE",
+                  "value":"${MetadataFile}",
+                  "type":"PLAINTEXT"
+                },
+                {
+                  "name":"GIT_REMOTE_URL",
+                  "value":"#{Source.CommitUrl}",
+                  "type":"PLAINTEXT"
+                },
+                {
+                  "name":"GIT_FULL_REVISION",
+                  "value":"#{Source.CommitId}",
+                  "type":"PLAINTEXT"
+                },
+                {
+                  "name":"GIT_BRANCH",
+                  "value":"#{Source.BranchName}",
+                  "type":"PLAINTEXT"
+                },
+                {
+                  "name":"GITHUB_REPOSITORY",
+                  "value":"#{Source.RepositoryName}",
+                  "type":"PLAINTEXT"
+                }
+              ]
+          InputArtifacts:
+          - Name: "GIT_SOURCE_FILES"
+          OutputArtifacts:
+          - Name: "APPLICATION_TEST_BUILD_OUTPUT"
+          RunOrder: 1
+        - Name: "Infrastructure_Test_Image"
+          ActionTypeId:
+            Category: "Build"
+            Owner: "AWS"
+            Provider: "CodeBuild"
+            Version: "1"
+          Configuration:
+            ProjectName: !Sub "custom-image-${ProjectSuffix}"
+            PrimarySource: "GIT_SOURCE_FILES"
+            EnvironmentVariables: !Sub |
+              [
+                {
+                  "name":"CUSTOM_IMAGE_TAG",
+                  "value":"infrastructure-test",
+                  "type":"PLAINTEXT"
+                },
+                {
+                  "name":"METADATA_FILE",
+                  "value":"${MetadataFile}",
+                  "type":"PLAINTEXT"
+                },
+                {
+                  "name":"GIT_REMOTE_URL",
+                  "value":"#{Source.CommitUrl}",
+                  "type":"PLAINTEXT"
+                },
+                {
+                  "name":"GIT_FULL_REVISION",
+                  "value":"#{Source.CommitId}",
+                  "type":"PLAINTEXT"
+                },
+                {
+                  "name":"GIT_BRANCH",
+                  "value":"#{Source.BranchName}",
+                  "type":"PLAINTEXT"
+                },
+                {
+                  "name":"GITHUB_REPOSITORY",
+                  "value":"#{Source.RepositoryName}",
+                  "type":"PLAINTEXT"
+                }
+              ]
+          InputArtifacts:
+          - Name: "GIT_SOURCE_FILES"
+          OutputArtifacts:
+          - Name: "INFRASTRUCTURE_TEST_BUILD_OUTPUT"
+          RunOrder: 1
+        - Name: "NodeJS_Image"
+          ActionTypeId:
+            Category: "Build"
+            Owner: "AWS"
+            Provider: "CodeBuild"
+            Version: "1"
+          Configuration:
+            ProjectName: !Sub "custom-image-${ProjectSuffix}"
+            PrimarySource: "GIT_SOURCE_FILES"
+            EnvironmentVariables: !Sub |
+              [
+                {
+                  "name":"CUSTOM_IMAGE_TAG",
+                  "value":"nodejs-build",
+                  "type":"PLAINTEXT"
+                },
+                {
+                  "name":"METADATA_FILE",
+                  "value":"${MetadataFile}",
+                  "type":"PLAINTEXT"
+                },
+                {
+                  "name":"GIT_REMOTE_URL",
+                  "value":"#{Source.CommitUrl}",
+                  "type":"PLAINTEXT"
+                },
+                {
+                  "name":"GIT_FULL_REVISION",
+                  "value":"#{Source.CommitId}",
+                  "type":"PLAINTEXT"
+                },
+                {
+                  "name":"GIT_BRANCH",
+                  "value":"#{Source.BranchName}",
+                  "type":"PLAINTEXT"
+                },
+                {
+                  "name":"GITHUB_REPOSITORY",
+                  "value":"#{Source.RepositoryName}",
+                  "type":"PLAINTEXT"
+                }
+              ]
+          InputArtifacts:
+          - Name: "GIT_SOURCE_FILES"
+          OutputArtifacts:
+          - Name: "NODEJS_BUILD_OUTPUT"
+          RunOrder: 1
+        - Name: "Orchestrator_Image"
+          ActionTypeId:
+            Category: "Build"
+            Owner: "AWS"
+            Provider: "CodeBuild"
+            Version: "1"
+          Configuration:
+            ProjectName: !Sub "custom-image-${ProjectSuffix}"
+            PrimarySource: "GIT_SOURCE_FILES"
+            EnvironmentVariables: !Sub |
+              [
+                {
+                  "name":"CUSTOM_IMAGE_TAG",
+                  "value":"orchestrator",
+                  "type":"PLAINTEXT"
+                },
+                {
+                  "name":"METADATA_FILE",
+                  "value":"${MetadataFile}",
+                  "type":"PLAINTEXT"
+                },
+                {
+                  "name":"GIT_REMOTE_URL",
+                  "value":"#{Source.CommitUrl}",
+                  "type":"PLAINTEXT"
+                },
+                {
+                  "name":"GIT_FULL_REVISION",
+                  "value":"#{Source.CommitId}",
+                  "type":"PLAINTEXT"
+                },
+                {
+                  "name":"GIT_BRANCH",
+                  "value":"#{Source.BranchName}",
+                  "type":"PLAINTEXT"
+                },
+                {
+                  "name":"GITHUB_REPOSITORY",
+                  "value":"#{Source.RepositoryName}",
+                  "type":"PLAINTEXT"
+                }
+              ]
+          InputArtifacts:
+          - Name: "GIT_SOURCE_FILES"
+          OutputArtifacts:
+          - Name: "ORCHESTRATOR_BUILD_OUTPUT"
+          RunOrder: 1
       Tags:
       - Key: "Name"
         Value: !Ref "AWS::StackName"
@@ -592,7 +782,7 @@ Metadata:
       - CloudFormationCapabilities
       - AppBaseFolder
       - ActionMode
-      - VersionFile
+      - MetadataFile
       - SecondRegion
       - ThirdRegion
     - Label:
@@ -611,6 +801,7 @@ Metadata:
       Parameters:
       - EnableGeneralRoleStage
       - EnableEcrStage
+      - EnableCodeBuildProjectStage
     - Label:
         default: "Secret Name/Key Configuration"
       Parameters:
@@ -632,8 +823,8 @@ Metadata:
         default: "Application Base Folder:"
       ActionMode:
         default: "Action Mode:"
-      VersionFile:
-        default: "Version File:"
+      MetadataFile:
+        default: "Metadata File:"
       SecondRegion:
         default: "Second Region:"
       ThirdRegion:
@@ -651,6 +842,8 @@ Metadata:
       SlackNotificationLambda:
         default: "Slack Notification Lambda:"
       # CodePipeline Features
+      EnableCodeBuildProjectStage:
+        default: "Enable CodeBuild Project Stage:"
       EnableGeneralRoleStage:
         default: "Enable General Role Stage:"
       EnableEcrStage:

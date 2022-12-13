@@ -4,16 +4,6 @@
 echo "Build Started on $(date)"
 
 #------------------------------------------------------------------------
-# BEGIN: Set some default variables and files
-#------------------------------------------------------------------------
-
-GITHUB_FILE="github.json"
-
-#------------------------------------------------------------------------
-# END: Set some default variables and files
-#------------------------------------------------------------------------
-
-#------------------------------------------------------------------------
 # BEGIN: Declare some functions
 #------------------------------------------------------------------------
 
@@ -35,20 +25,6 @@ check_docker_status () {
     #Kill the build script so that we go no further.
     exit 1
   fi
-}
-
-create_github_json () {
-  local organization="$1"
-  local repository="$2"
-  local branch="$3"
-  local commit="$4"
-  local version="$5"
-  local file="$6"
-  local base="https://github.com"
-
-  echo "Create the GitHub JSON file..."
-
-  printf '{"organization":"%s","repository":"%s","branch":"%s","commit":"%s","commitUrl":"%s","releaseUrl":"%s"}' "$organization" "$repository" "$branch" "$commit" "$base/$organization/$repository/commit/$commit" "$base/$organization/$repository/releases/tag/v$version" > "./$file"
 }
 
 #Because CodeBuild doesn't pass environment between phases, putting in a patch.
@@ -110,9 +86,6 @@ else
 fi
 
 if [ "$RUN_BUILD" = "true" ]; then
-
-  echo "Creating a file with additional GitHub information."
-  create_github_json "$GITHUB_ORGANIZATION" "$GITHUB_REPOSITORY" "$GIT_BRANCH" "$GIT_FULL_REVISION" "$VERSION" "$GITHUB_FILE"
 
   echo "Checking the docker version..."
   docker version
