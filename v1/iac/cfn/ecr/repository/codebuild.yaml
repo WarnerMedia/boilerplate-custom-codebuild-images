@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "Create an ECS image repository (ECR) for CodeBuild images - (v1.0.0)"
+Description: "Create an ECS image repository (ECR) for CodeBuild images - (v1.1.0)"
 Parameters:
   # General Configuration
   InfrastructureName:
@@ -20,7 +20,7 @@ Parameters:
     Default: "No"
   EcrExternalAccounts:
     Type: "CommaDelimitedList"
-    Description: "A list of Account IDs that can pull from this repository."
+    Description: "A list of Account ARNs that can pull from this repository."
     Default: "arn:aws:iam::222221111111:root"
   EcrImageCount:
     Type: "String"
@@ -41,6 +41,7 @@ Parameters:
     - "IMMUTABLE"
     Default: "MUTABLE"
 Conditions:
+  DisableExternalAccountAccess: !Equals [ !Ref EnableExternalAccountAccess, "No" ]
   EnableExternalAccountAccess: !Equals [ !Ref EnableExternalAccountAccess, "Yes" ]
 Resources:
   CodeBuildEcr:
@@ -69,14 +70,7 @@ Resources:
       RepositoryPolicyText:
         Version: "2012-10-17"
         Statement:
-        - Sid: "CodeBuildAccessPrincipal"
-          Effect: "Allow"
-          Principal:
-            Service: "codebuild.amazonaws.com"
-          Action:
-          - "ecr:GetDownloadUrlForLayer"
-          - "ecr:BatchGetImage"
-          - "ecr:BatchCheckLayerAvailability"
+
         - Sid: "FullAccess"
           Effect: "Allow"
           Principal:
@@ -84,6 +78,19 @@ Resources:
             - !Sub "arn:aws:iam::${AWS::AccountId}:root"
           Action:
           - "ecr:*"
+
+        - !If
+          - DisableExternalAccountAccess
+          - Sid: "CodeBuildAccessPrincipal"
+            Effect: "Allow"
+            Principal:
+              Service: "codebuild.amazonaws.com"
+            Action:
+            - "ecr:GetDownloadUrlForLayer"
+            - "ecr:BatchGetImage"
+            - "ecr:BatchCheckLayerAvailability"
+          - !Ref "AWS::NoValue"
+
         - !If
           - EnableExternalAccountAccess
           - Sid: "PullOnly"

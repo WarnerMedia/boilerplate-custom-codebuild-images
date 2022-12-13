@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "Create a CodePipeline for deploying custom docker images for CodeBuild. - (v1.3.3)"
+Description: "Create a CodePipeline for deploying custom docker images for CodeBuild. - (v1.4.0)"
 Parameters:
   # General Configuration
   SuggestedStackName:
@@ -115,6 +115,18 @@ Parameters:
     Type: "String"
     Description: "The name of the Slack notification Lambda (if one has already been created for this region).  It would be recommended to target the testing version for this CodePipeline (to make it easy to test your changes)."
     Default: "codepipeline-slack-notification-prod"
+  # ECR Configuration
+  EnableExternalAccountAccess:
+    Type: "String"
+    Description: "Should external account access to this repository be enabled?"
+    AllowedValues:
+    - "Yes"
+    - "No"
+    Default: "No"
+  EcrExternalAccounts:
+    Type: "String"
+    Description: "A list of Account ARNs that can pull from this repository."
+    Default: "arn:aws:iam::222221111111:root"
   # CodePipeline Features
   EnableCodeBuildProjectStage:
     Type: "String"
@@ -398,7 +410,9 @@ Resources:
               ParameterOverrides: !Sub |
                 {
                   "InfrastructureName": "${InfrastructureName}",
-                  "EcsRepositoryName": "${ProjectSuffix}"
+                  "EcsRepositoryName": "${ProjectSuffix}",
+                  "EnableExternalAccountAccess": "${EnableExternalAccountAccess}",
+                  "EcrExternalAccounts": "${EcrExternalAccounts}"
                 }
             InputArtifacts:
             - Name: "GIT_SOURCE_FILES"
@@ -432,7 +446,9 @@ Resources:
                 ParameterOverrides: !Sub |
                   {
                     "InfrastructureName": "${InfrastructureName}",
-                    "EcsRepositoryName": "${ProjectSuffix}"
+                    "EcsRepositoryName": "${ProjectSuffix}",
+                    "EnableExternalAccountAccess": "${EnableExternalAccountAccess}",
+                    "EcrExternalAccounts": "${EcrExternalAccounts}"
                   }
               InputArtifacts:
               - Name: "GIT_SOURCE_FILES"
@@ -466,7 +482,9 @@ Resources:
                 ParameterOverrides: !Sub |
                   {
                     "InfrastructureName": "${InfrastructureName}",
-                    "EcsRepositoryName": "${ProjectSuffix}"
+                    "EcsRepositoryName": "${ProjectSuffix}",
+                    "EnableExternalAccountAccess": "${EnableExternalAccountAccess}",
+                    "EcrExternalAccounts": "${EcrExternalAccounts}"
                   }
               InputArtifacts:
               - Name: "GIT_SOURCE_FILES"
@@ -798,6 +816,11 @@ Metadata:
       - EnableNotifications
       - SlackNotificationLambda
     - Label:
+        default: "ECR Configuration"
+      Parameters:
+      - EnableExternalAccountAccess
+      - EcrExternalAccounts
+    - Label:
         default: "CodePipeline Feature Configuration"
       Parameters:
       - EnableGeneralRoleStage
@@ -842,6 +865,11 @@ Metadata:
         default: "Enable Notifications:"
       SlackNotificationLambda:
         default: "Slack Notification Lambda:"
+      # ECR Configuration
+      EnableExternalAccountAccess:
+        default: "Enable External Account Access:"
+      EcrExternalAccounts:
+        default: "ECR External Accounts:"
       # CodePipeline Features
       EnableCodeBuildProjectStage:
         default: "Enable CodeBuild Project Stage:"
