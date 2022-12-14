@@ -70,7 +70,6 @@ Resources:
       RepositoryPolicyText:
         Version: "2012-10-17"
         Statement:
-
         - Sid: "FullAccess"
           Effect: "Allow"
           Principal:
@@ -78,18 +77,14 @@ Resources:
             - !Sub "arn:aws:iam::${AWS::AccountId}:root"
           Action:
           - "ecr:*"
-
-        - !If
-          - DisableExternalAccountAccess
-          - Sid: "CodeBuildAccessPrincipal"
-            Effect: "Allow"
-            Principal:
-              Service: "codebuild.amazonaws.com"
-            Action:
-            - "ecr:GetDownloadUrlForLayer"
-            - "ecr:BatchGetImage"
-            - "ecr:BatchCheckLayerAvailability"
-          - !Ref "AWS::NoValue"
+        - Sid: "CodeBuildAccessPrincipal"
+          Effect: "Allow"
+          Principal:
+            Service: "codebuild.amazonaws.com"
+          Action:
+          - "ecr:GetDownloadUrlForLayer"
+          - "ecr:BatchGetImage"
+          - "ecr:BatchCheckLayerAvailability"
 
         - !If
           - EnableExternalAccountAccess
@@ -111,6 +106,7 @@ Resources:
             - "ecr:ListTagsForResource"
             - "ecr:DescribeImageScanFindings"
           - !Ref "AWS::NoValue"
+
       Tags:
       - Key: "Name"
         Value: !Ref "AWS::StackName"
